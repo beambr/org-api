@@ -1,0 +1,165 @@
+org: beambr
+app: org-api
+service: org-api
+
+package:
+  patterns:
+    - '!.vscode/**'
+    - '!.github/**'
+    - '!test/**'
+    - '!package.json'
+    - '!package-lock.json'
+    - '!README.md'
+    - '!.gitattributes'
+    - '!.coverage'
+    - '!.coveragerc'
+    - '!htmlcov/**'
+
+frameworkVersion: '3'
+
+resources:
+  Resources:
+    ClientTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Client-${opt:stage, 'dev'}
+        AttributeDefinitions:
+          - AttributeName: AdvisorId
+            AttributeType: S
+          - AttributeName: ClientId
+            AttributeType: S
+          - AttributeName: ClientIdVersion
+            AttributeType: S
+        KeySchema:
+          - AttributeName: AdvisorId
+            KeyType: HASH
+          - AttributeName: ClientIdVersion
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        GlobalSecondaryIndexes:
+          - IndexName: ClientIdIndex
+            KeySchema:
+              - AttributeName: AdvisorId
+                KeyType: HASH
+              - AttributeName: ClientId
+                KeyType: RANGE
+            Projection:
+              ProjectionType: 'ALL'
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+          - IndexName: AdvisorIdIndex
+            KeySchema:
+              - AttributeName: AdvisorId
+                KeyType: HASH
+            Projection:
+              ProjectionType: 'ALL'
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+provider:
+  name: aws
+  runtime: python3.9
+  environment:
+    STAGE: ${opt:stage, 'dev'}
+    TYPEFORM_URL: ${param:typeform_url, 'https://www.example.com/abcde?client_id='}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action: 'dynamodb:*'
+          Resource: 
+            - "Fn::GetAtt": [ClientTable, Arn]
+        - Effect: Allow
+          Action: 'secretsmanager:*'
+          Resource: 'arn:aws:secretsmanager:us-east-1:064935776731:secret:TYPEFORM_WEBHOOK-q6vbun'
+  httpApi:
+    cors: true
+    authorizers:
+      jwtAuthorizer:
+        type: jwt
+        identitySource: $request.header.Authorization
+        issuerUrl: https://cognito-idp.us-west-2.amazonaws.com/us-west-2_bSqaa2B0s # TODO: Need to point per environment
+        audience:
+          - 3fecbrtfcdcoju59776meqh1r9 # TODO: Need to point per environment
+  region: ${opt:region, 'us-east-1'}
+  
+plugins:
+  - serverless-python-requirements
+
+functions:
+  clients:
+    handler: handlers/clients.handler
+    events:
+      - httpApi:
+          path: /
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+  client:
+    handler: handlers/client.handler
+    events:
+      - httpApi:
+          path: /{id}
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /{id}
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+  demographics:
+    handler: handlers/demographics.handler
+    events:
+      - httpApi:
+          path: /{id}/demographics
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /{id}/demographics
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+  healthcare:
+    handler: handlers/healthcare.handler
+    events:
+      - httpApi:
+          path: /{id}/healthcare
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /{id}/healthcare
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+  financial:
+    handler: handlers/financial.handler
+    events:
+      - httpApi:
+          path: /{id}/financial
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+      - httpApi:
+          path: /{id}/financial
+          method: put
+          authorizer:
+            name: jwtAuthorizer
+  typeform:
+    handler: handlers/typeform.handler
+    events:
+      - httpApi:
+          path: /init
+          method: put
